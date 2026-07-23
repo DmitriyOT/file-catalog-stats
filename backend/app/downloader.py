@@ -52,6 +52,10 @@ async def run_download_job(
                     job = await session.get(DownloadJob, job_id)
                     job.files_downloaded += len(files)
                     await session.commit()
+                    logger.info(
+                        "Задача %d: получено %d имён, скачано %d",
+                        job_id, job.names_received, job.files_downloaded,
+                    )
 
             job = await session.get(DownloadJob, job_id)
             job.status = "done"
