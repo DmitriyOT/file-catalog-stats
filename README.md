@@ -52,7 +52,7 @@ cd backend
 | `API_BASE_URL` | `http://91.199.149.128:18001` | URL внешнего API выдачи файлов |
 | `CANDIDATE_ID` | `installbiz-candidate` | Значение заголовка `X-Candidate-Id`; прогресс скачивания привязан к нему |
 | `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/filestats` | DSN базы |
-| `REQUEST_MIN_INTERVAL` | `0.3` | Минимальная пауза между запросами к внешнему API, сек |
+| `REQUEST_MIN_INTERVAL` | `1.5` | Минимальная пауза между запросами к внешнему API, сек |
 | `MAX_RETRIES` | `10` | Максимум повторов запроса при 429/403/5xx |
 
 ## Как это работает

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/filestats"
 
     # Клиент внешнего API
-    request_min_interval: float = 0.3  # проактивная пауза между запросами, сек
+    request_min_interval: float = 1.5  # проактивная пауза между запросами, сек
     request_timeout: float = 30.0
     max_retries: int = 10
 
