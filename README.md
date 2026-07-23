@@ -16,7 +16,7 @@
 docker compose up --build
 ```
 
-- UI: http://localhost:8080
+- UI: http://localhost:8085
 - API (Swagger): http://localhost:8000/docs
 
 ### Локальная разработка
