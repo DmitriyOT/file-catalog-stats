@@ -26,7 +26,10 @@ async def run_download_job(
     session_factory: async_sessionmaker[AsyncSession],
     client: FileApiClient,
 ) -> None:
-    """Скачать весь каталог: имена -> скачивание по 3 -> отметка, до пустого списка имён."""
+    """Скачать весь каталог: имена -> скачивание по 3 -> отметка, до пустого списка имён.
+
+    Задача владеет переданным клиентом и закрывает его по завершении.
+    """
     try:
         async with session_factory() as session:
             while True:
@@ -47,11 +50,14 @@ async def run_download_job(
                         if exists is None:
                             session.add(File(name=name, content=content, downloaded_at=datetime.now(UTC)))
 
-                    await client.mark_downloaded(list(files))
-
                     job = await session.get(DownloadJob, job_id)
                     job.files_downloaded += len(files)
                     await session.commit()
+
+                    # Отметка на сервере — только после commit: иначе при падении
+                    # коммита файлы окажутся отмеченными, но не сохранёнными локально.
+                    # При повторном прогоне дубли отсечёт exists-check выше, а mark идемпотентен.
+                    await client.mark_downloaded(list(files))
                     logger.info(
                         "Задача %d: получено %d имён, скачано %d",
                         job_id, job.names_received, job.files_downloaded,
@@ -73,6 +79,7 @@ async def run_download_job(
                 await session.commit()
     finally:
         _running.pop(job_id, None)
+        await client.close()
 
 
 def start_download_job(
