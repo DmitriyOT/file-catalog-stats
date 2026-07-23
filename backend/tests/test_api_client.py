@@ -126,3 +126,53 @@ async def test_mark_downloaded():
     result = await client.mark_downloaded(["a.txt", "b.txt", "c.txt"])
     assert result.marked_now == 2
     assert result.already_marked == 1
+
+
+async def test_429_raises_min_interval():
+    """Retry-After при 429 — это лимит сервера: интервал растёт на всю сессию."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(429, json={"detail": "slow down"}, headers={"Retry-After": "5"})
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler)
+    assert client._min_interval == 0  # в тестах базовый интервал обнулён
+    assert await client.get_names() == []
+    assert client._min_interval == 5.0
+    assert client._blocked_until > 0
+
+
+async def test_429_never_shrinks_interval():
+    """Меньший Retry-After не должен снижать уже выученный лимит."""
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": "10"}),
+            httpx.Response(429, headers={"Retry-After": "2"}),
+            httpx.Response(200, json={"file_names": []}),
+        ]
+    )
+
+    client = make_client(lambda r: next(responses))
+    assert await client.get_names() == []
+    assert client._min_interval == 10.0
+
+
+async def test_403_does_not_raise_min_interval():
+    """Retry-After при 403 — длительность бана, а не лимит темпа."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(403, json={"detail": "banned"}, headers={"Retry-After": "1800"})
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler)
+    assert await client.get_names() == []
+    assert client._min_interval == 0  # интервал не вырос
+    assert client._blocked_until > 0  # но запросы заблокированы до разбана

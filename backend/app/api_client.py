@@ -29,7 +29,10 @@ class FileApiClient:
     """Клиент API выдачи файлов с учётом ограничений частоты запросов.
 
     - проактивная пауза между запросами (request_min_interval);
-    - 429/403: пауза по заголовку Retry-After и повтор;
+    - 429/403: все запросы блокируются до конца Retry-After (_blocked_until);
+    - 429: Retry-After запоминается как лимит темпа на всю сессию —
+      сервер сообщил «не чаще, чем раз в N секунд», и мы ему подчиняемся,
+      иначе повторные нарушения приведут к 30-минутному бану (403);
     - сетевые ошибки и 5xx: повтор с экспоненциальным backoff.
     """
 
@@ -47,6 +50,8 @@ class FileApiClient:
         )
         self._owns_client = client is None
         self._last_request_at = 0.0
+        self._blocked_until = 0.0  # монотонное время, до которого запросы запрещены (Retry-After)
+        self._min_interval = settings.request_min_interval  # растёт при 429 — см. _slow_down
 
     async def close(self) -> None:
         if self._owns_client:
@@ -93,7 +98,7 @@ class FileApiClient:
                     "%s %s -> %s, повтор через %.1f c (попытка %d/%d)",
                     method, path, resp.status_code, retry_after, attempt + 1, settings.max_retries,
                 )
-                await asyncio.sleep(retry_after)
+                self._slow_down(resp.status_code, retry_after)
                 continue
 
             if resp.status_code >= 500:
@@ -105,10 +110,26 @@ class FileApiClient:
 
         raise ExternalApiError(f"{method} {path}: исчерпаны повторы ({settings.max_retries})")
 
+    def _slow_down(self, status: int, retry_after: float) -> None:
+        """Остановить все запросы до конца Retry-After; при 429 — запомнить лимит темпа.
+
+        Retry-After при 429 — это фактически сообщение о лимите сервера
+        («не чаще одного запроса в N секунд»), поэтому он становится новым
+        минимальным интервалом на всю сессию. При 403 (бан) Retry-After —
+        длительность блокировки, а не лимит, интервал не трогаем.
+        """
+        self._blocked_until = time.monotonic() + retry_after
+        if status == 429 and retry_after > self._min_interval:
+            self._min_interval = retry_after
+            logger.info("Сервер сообщил лимит: не чаще 1 запроса в %.1f c", retry_after)
+
     async def _throttle(self) -> None:
-        elapsed = time.monotonic() - self._last_request_at
-        if elapsed < settings.request_min_interval:
-            await asyncio.sleep(settings.request_min_interval - elapsed)
+        wait = max(
+            self._blocked_until,
+            self._last_request_at + self._min_interval,
+        ) - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
         self._last_request_at = time.monotonic()
 
     @staticmethod
