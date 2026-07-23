@@ -36,12 +36,17 @@ export default function FilesPage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [calculating, setCalculating] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     try {
-      setData(await getFiles(page, PER_PAGE, sort, search));
+      const result = await getFiles(page, PER_PAGE, sort, search);
+      // поздний ответ устаревшего запроса не должен перезаписать более свежий
+      if (seq === requestSeq.current) setData(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (seq === requestSeq.current)
+        setError(e instanceof Error ? e.message : String(e));
     }
   }, [page, sort, search]);
 
@@ -136,7 +141,13 @@ export default function FilesPage() {
               />
             </th>
             <th>Имя файла</th>
-            <th className="sortable" onClick={() => setSort(sort === "asc" ? "desc" : "asc")}>
+            <th
+              className="sortable"
+              onClick={() => {
+                setPage(1);
+                setSort(sort === "asc" ? "desc" : "asc");
+              }}
+            >
               Время скачивания (НСК) {sort === "asc" ? "▲" : "▼"}
             </th>
           </tr>

@@ -16,7 +16,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
-    throw new Error(body?.detail ?? `HTTP ${resp.status}`);
+    const detail = body?.detail;
+    // FastAPI при 422 отдаёт detail массивом объектов с полем msg
+    const message = Array.isArray(detail)
+      ? detail.map((d) => d?.msg ?? JSON.stringify(d)).join("; ")
+      : (detail ?? `HTTP ${resp.status}`);
+    throw new Error(message);
   }
   return resp.json() as Promise<T>;
 }

@@ -38,12 +38,18 @@ export default function DownloadPage() {
   }, [refresh, stopPolling]);
 
   useEffect(() => {
-    refresh().then(() => {
-      // если задача уже выполняется — продолжаем следить
-      getJobStatus().then((s) => s?.status === "running" && startPolling());
+    let cancelled = false;
+    // если задача уже выполняется — продолжаем следить
+    getJobStatus().then((s) => {
+      if (cancelled) return;
+      setJob(s);
+      if (s?.status === "running") startPolling();
     });
-    return stopPolling;
-  }, [refresh, startPolling, stopPolling]);
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [startPolling, stopPolling]);
 
   const handleStart = async () => {
     setError(null);
