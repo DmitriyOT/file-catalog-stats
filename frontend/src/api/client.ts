@@ -44,8 +44,19 @@ export interface FilePage {
   pages: number;
 }
 
-export function getFiles(page: number, perPage: number, sort: "asc" | "desc"): Promise<FilePage> {
-  return request<FilePage>(`/api/files?page=${page}&per_page=${perPage}&sort=${sort}`);
+export function getFiles(
+  page: number,
+  perPage: number,
+  sort: "asc" | "desc",
+  search = "",
+): Promise<FilePage> {
+  const params = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+    sort,
+  });
+  if (search) params.set("search", search);
+  return request<FilePage>(`/api/files?${params}`);
 }
 
 export interface FileStats {

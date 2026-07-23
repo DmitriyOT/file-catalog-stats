@@ -35,13 +35,21 @@ async def list_files(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     sort: str = Query("asc", pattern="^(asc|desc)$"),
+    search: str = Query("", max_length=255),
     session: AsyncSession = Depends(get_session),
 ) -> FilePage:
-    """Список скачанных файлов с пагинацией и сортировкой по времени скачивания."""
-    total = await session.scalar(select(func.count(File.id))) or 0
+    """Список скачанных файлов с пагинацией, сортировкой и поиском по имени."""
+    count_stmt = select(func.count(File.id))
+    list_stmt = select(File)
+    if search:
+        condition = File.name.ilike(f"%{search}%")
+        count_stmt = count_stmt.where(condition)
+        list_stmt = list_stmt.where(condition)
+
+    total = await session.scalar(count_stmt) or 0
     order = File.downloaded_at.desc() if sort == "desc" else File.downloaded_at.asc()
     rows = await session.scalars(
-        select(File).order_by(order, File.id).offset((page - 1) * per_page).limit(per_page)
+        list_stmt.order_by(order, File.id).offset((page - 1) * per_page).limit(per_page)
     )
     return FilePage(
         items=[

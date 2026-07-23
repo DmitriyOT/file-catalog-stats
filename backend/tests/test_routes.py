@@ -52,6 +52,18 @@ async def test_files_pagination_and_sort(client, session_factory):
     assert "downloaded_at_nsk" in body["items"][0]
 
 
+async def test_files_search(client, session_factory):
+    await seed_files(session_factory, 25)
+
+    resp = await client.get("/api/files", params={"search": "file_2"})
+    body = resp.json()
+    assert body["total"] == 5  # file_20..file_24
+    assert all("file_2" in item["name"] for item in body["items"])
+
+    resp = await client.get("/api/files", params={"search": "нет_такого"})
+    assert resp.json()["total"] == 0
+
+
 async def test_job_status_null(client):
     resp = await client.get("/api/job/status")
     assert resp.status_code == 200

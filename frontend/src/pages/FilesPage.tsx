@@ -1,30 +1,63 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FilePage, getFiles, getStats, StatsResponse } from "../api/client";
 import StatsPanel from "../components/StatsPanel";
 
 const PER_PAGE = 20;
+const SEARCH_DEBOUNCE_MS = 400;
+
+/** Номера страниц с многоточиями: 1 … 4 5 [6] 7 8 … 42 */
+function pageWindow(page: number, pages: number): (number | "…")[] {
+  if (pages <= 9) return Array.from({ length: pages }, (_, i) => i + 1);
+  const near = new Set(
+    [1, 2, page - 2, page - 1, page, page + 1, page + 2, pages - 1, pages].filter(
+      (p) => p >= 1 && p <= pages,
+    ),
+  );
+  const sorted = [...near].sort((a, b) => a - b);
+  const out: (number | "…")[] = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (p - prev > 1) out.push("…");
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
 
 export default function FilesPage() {
   const [data, setData] = useState<FilePage | null>(null);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<"asc" | "desc">("asc");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [calculating, setCalculating] = useState(false);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setData(await getFiles(page, PER_PAGE, sort));
+      setData(await getFiles(page, PER_PAGE, sort, search));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [page, sort]);
+  }, [page, sort, search]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Поиск с debounce: применяем через 400 мс после последнего символа
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => {
+      setPage(1);
+      setSearch(value.trim());
+    }, SEARCH_DEBOUNCE_MS);
+  };
 
   const toggleOne = (id: number) => {
     setSelectAll(false);
@@ -74,6 +107,13 @@ export default function FilesPage() {
       {error && <p className="error">{error}</p>}
 
       <div className="toolbar">
+        <input
+          type="search"
+          className="search"
+          placeholder="Поиск по имени файла…"
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
+        />
         <label>
           <input type="checkbox" checked={selectAll} onChange={toggleAll} /> Выбрать вообще все (
           {data?.total ?? 0})
@@ -118,7 +158,9 @@ export default function FilesPage() {
           ))}
           {data?.items.length === 0 && (
             <tr>
-              <td colSpan={3}>Файлов пока нет — запустите скачивание на первой странице.</td>
+              <td colSpan={3}>
+                {search ? `Ничего не найдено по запросу «${search}».` : "Файлов пока нет."}
+              </td>
             </tr>
           )}
         </tbody>
@@ -127,13 +169,25 @@ export default function FilesPage() {
       {data && data.pages > 1 && (
         <div className="pagination">
           <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            ← Назад
+            ←
           </button>
-          <span>
-            Страница {data.page} из {data.pages}
-          </span>
+          {pageWindow(data.page, data.pages).map((p, i) =>
+            p === "…" ? (
+              <span key={`gap-${i}`} className="gap">
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                className={p === data.page ? "active" : ""}
+                onClick={() => setPage(p)}
+              >
+                {p}
+              </button>
+            ),
+          )}
           <button disabled={page >= data.pages} onClick={() => setPage(page + 1)}>
-            Вперёд →
+            →
           </button>
         </div>
       )}

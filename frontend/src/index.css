@@ -112,3 +112,62 @@ table.stats td {
   text-align: center;
   min-width: 2.5rem;
 }
+
+.search {
+  padding: 0.45rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid #cbd2d9;
+  border-radius: 4px;
+  min-width: 260px;
+}
+
+.pagination button {
+  padding: 0.3rem 0.65rem;
+  background: #e4e7eb;
+  color: #1f2933;
+}
+
+.pagination button.active {
+  background: #0967d2;
+  color: #fff;
+  font-weight: 600;
+}
+
+.pagination button:disabled {
+  background: #f5f7fa;
+  color: #9aa5b1;
+}
+
+.pagination .gap {
+  color: #9aa5b1;
+}
+
+.download-badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: #323f4b;
+  color: #9fe6b8;
+  font-size: 0.9rem;
+}
+
+.pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3ebd64;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
