@@ -42,7 +42,7 @@ npm run dev
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest                  # 19 тестов, БД — SQLite in-memory
+.venv/Scripts/python -m pytest                  # БД — SQLite in-memory
 ```
 
 ## Переменные окружения (backend)
@@ -53,6 +53,7 @@ cd backend
 | `CANDIDATE_ID` | `installbiz-candidate` | Значение заголовка `X-Candidate-Id`; прогресс скачивания привязан к нему |
 | `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/filestats` | DSN базы |
 | `REQUEST_MIN_INTERVAL` | `1.5` | Минимальная пауза между запросами к внешнему API, сек |
+| `REQUEST_TIMEOUT` | `30.0` | Таймаут запроса к внешнему API, сек |
 | `MAX_RETRIES` | `10` | Максимум повторов запроса при 429/403/5xx |
 
 ## Как это работает
@@ -80,6 +81,6 @@ backend/
   tests/
 frontend/
   src/pages/        # DownloadPage, FilesPage
-  src/components/   # StatsPanel
+  src/components/   # Header, StatsPanel
 docker-compose.yml  # db, backend, frontend (nginx)
 ```
