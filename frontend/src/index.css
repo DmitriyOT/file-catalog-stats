@@ -42,3 +42,30 @@ main {
   max-width: 1100px;
   margin: 0 auto;
 }
+
+button {
+  padding: 0.5rem 1.25rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #0967d2;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #9aa5b1;
+  cursor: default;
+}
+
+.card {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+
+.error {
+  color: #cf1124;
+}
