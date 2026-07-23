@@ -26,6 +26,7 @@ function pageWindow(page: number, pages: number): (number | "…")[] {
 
 export default function FilesPage() {
   const [data, setData] = useState<FilePage | null>(null);
+  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<"asc" | "desc">("asc");
   const [search, setSearch] = useState("");
@@ -40,6 +41,7 @@ export default function FilesPage() {
 
   const load = useCallback(async () => {
     const seq = ++requestSeq.current;
+    setLoading(true);
     try {
       const result = await getFiles(page, PER_PAGE, sort, search);
       // поздний ответ устаревшего запроса не должен перезаписать более свежий
@@ -47,12 +49,23 @@ export default function FilesPage() {
     } catch (e) {
       if (seq === requestSeq.current)
         setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      // индикатор снимает только последний (актуальный) запрос
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, [page, sort, search]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // при размонтировании отменяем отложенное применение поиска
+  useEffect(
+    () => () => {
+      if (debounce.current) clearTimeout(debounce.current);
+    },
+    [],
+  );
 
   // Поиск с debounce: применяем через 400 мс после последнего символа
   const handleSearchChange = (value: string) => {
@@ -66,6 +79,7 @@ export default function FilesPage() {
 
   const toggleOne = (id: number) => {
     setSelectAll(false);
+    setStats(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -79,6 +93,7 @@ export default function FilesPage() {
 
   const togglePage = () => {
     setSelectAll(false);
+    setStats(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (allOnPageSelected) pageIds.forEach((id) => next.delete(id));
@@ -89,6 +104,7 @@ export default function FilesPage() {
 
   const toggleAll = () => {
     setSelectAll((prev) => !prev);
+    setStats(null);
     setSelected(new Set());
   };
 
@@ -167,7 +183,12 @@ export default function FilesPage() {
               <td>{f.downloaded_at_nsk}</td>
             </tr>
           ))}
-          {data?.items.length === 0 && (
+          {loading && (
+            <tr>
+              <td colSpan={3}>Загрузка…</td>
+            </tr>
+          )}
+          {!loading && data?.items.length === 0 && (
             <tr>
               <td colSpan={3}>
                 {search ? `Ничего не найдено по запросу «${search}».` : "Файлов пока нет."}
