@@ -29,14 +29,16 @@ async def run_download_job(
     """Скачать весь каталог: имена -> скачивание по 3 -> отметка, до пустого списка имён.
 
     Задача владеет переданным клиентом и закрывает его по завершении.
+    Сессия переоткрывается на каждую итерацию: цикл с банами/паузами может идти
+    часами, и одно соединение на весь прогон не переживёт обрыв сети.
     """
     try:
-        async with session_factory() as session:
-            while True:
-                names = await client.get_names()
-                if not names:
-                    break
+        while True:
+            names = await client.get_names()
+            if not names:
+                break
 
+            async with session_factory() as session:
                 job = await session.get(DownloadJob, job_id)
                 job.names_received += len(names)
                 await session.commit()
@@ -63,6 +65,7 @@ async def run_download_job(
                         job_id, job.names_received, job.files_downloaded,
                     )
 
+        async with session_factory() as session:
             job = await session.get(DownloadJob, job_id)
             job.status = "done"
             job.finished_at = datetime.now(UTC)
