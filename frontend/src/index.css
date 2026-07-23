@@ -69,3 +69,36 @@ button:disabled {
 .error {
   color: #cf1124;
 }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+
+th,
+td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e4e7eb;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}

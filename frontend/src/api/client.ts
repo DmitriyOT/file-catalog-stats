@@ -28,3 +28,22 @@ export function startJob(): Promise<JobStatus> {
 export function getJobStatus(): Promise<JobStatus | null> {
   return request<JobStatus | null>("/api/job/status");
 }
+
+export interface FileItem {
+  id: number;
+  name: string;
+  downloaded_at: string;
+  downloaded_at_nsk: string;
+}
+
+export interface FilePage {
+  items: FileItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export function getFiles(page: number, perPage: number, sort: "asc" | "desc"): Promise<FilePage> {
+  return request<FilePage>(`/api/files?page=${page}&per_page=${perPage}&sort=${sort}`);
+}

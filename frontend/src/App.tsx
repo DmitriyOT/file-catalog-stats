@@ -1,5 +1,6 @@
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import DownloadPage from "./pages/DownloadPage";
+import FilesPage from "./pages/FilesPage";
 
 export default function App() {
   return (
@@ -14,7 +15,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<DownloadPage />} />
-          <Route path="/files" element={<p>Страница файлов (шаг 5)</p>} />
+          <Route path="/files" element={<FilesPage />} />
         </Routes>
       </main>
     </BrowserRouter>
