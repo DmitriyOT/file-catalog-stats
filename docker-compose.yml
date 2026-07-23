@@ -9,6 +9,11 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d filestats"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
 
   backend:
     build: ./backend
@@ -17,7 +22,8 @@ services:
       API_BASE_URL: http://91.199.149.128:18001
       CANDIDATE_ID: installbiz-candidate
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
 
