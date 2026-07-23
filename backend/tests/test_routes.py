@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.models import File
 
@@ -50,6 +51,19 @@ async def test_files_pagination_and_sort(client, session_factory):
 
     # время скачивания отдаётся и по Новосибирску
     assert "downloaded_at_nsk" in body["items"][0]
+
+
+async def test_files_nsk_time_value(client, session_factory):
+    # naive datetime из SQLite должен трактоваться как UTC, а не как локальное время ОС
+    moment = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+    async with session_factory() as session:
+        session.add(File(name="tz.txt", content="x", downloaded_at=moment))
+        await session.commit()
+
+    resp = await client.get("/api/files")
+    item = resp.json()["items"][0]
+    expected = moment.astimezone(ZoneInfo("Asia/Novosibirsk")).strftime("%d.%m.%Y %H:%M:%S")
+    assert item["downloaded_at_nsk"] == expected
 
 
 async def test_files_search(client, session_factory):
