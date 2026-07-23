@@ -5,6 +5,7 @@ venv/
 .pytest_cache/
 node_modules/
 dist/
+*.tsbuildinfo
 *.local
 .env
 .DS_Store
