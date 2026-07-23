@@ -9,3 +9,11 @@ dist/
 *.local
 .env
 .DS_Store
+*.log
+.idea/
+.vscode/
+
+# Локальные материалы задания (не публикуются)
+task.md
+vacancy.md
+plan.md
