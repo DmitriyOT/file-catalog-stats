@@ -102,3 +102,13 @@ th.sortable {
   gap: 1rem;
   margin-top: 1rem;
 }
+
+table.stats {
+  margin-bottom: 1.5rem;
+}
+
+table.stats th,
+table.stats td {
+  text-align: center;
+  min-width: 2.5rem;
+}

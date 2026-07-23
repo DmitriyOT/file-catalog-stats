@@ -47,3 +47,21 @@ export interface FilePage {
 export function getFiles(page: number, perPage: number, sort: "asc" | "desc"): Promise<FilePage> {
   return request<FilePage>(`/api/files?page=${page}&per_page=${perPage}&sort=${sort}`);
 }
+
+export interface FileStats {
+  id: number;
+  name: string;
+  counts: Record<string, number>;
+}
+
+export interface StatsResponse {
+  total: Record<string, number>;
+  files: FileStats[];
+}
+
+export function getStats(fileIds: number[], all: boolean): Promise<StatsResponse> {
+  return request<StatsResponse>("/api/stats", {
+    method: "POST",
+    body: JSON.stringify({ file_ids: fileIds, all }),
+  });
+}

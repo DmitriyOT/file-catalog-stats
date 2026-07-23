@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import init_db
-from app.routes import download, files
+from app.routes import download, files, stats
 
 
 @asynccontextmanager
@@ -25,6 +25,7 @@ app.add_middleware(
 
 app.include_router(download.router)
 app.include_router(files.router)
+app.include_router(stats.router)
 
 
 @app.get("/api/health")

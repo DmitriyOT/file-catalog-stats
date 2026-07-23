@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { FilePage, getFiles } from "../api/client";
+import { FilePage, getFiles, getStats, StatsResponse } from "../api/client";
+import StatsPanel from "../components/StatsPanel";
 
 const PER_PAGE = 20;
 
@@ -10,6 +11,8 @@ export default function FilesPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [calculating, setCalculating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +56,18 @@ export default function FilesPage() {
 
   const chosenCount = selectAll ? (data?.total ?? 0) : selected.size;
 
+  const handleCalculate = async () => {
+    setError(null);
+    setCalculating(true);
+    try {
+      setStats(await getStats(selectAll ? [] : [...selected], selectAll));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalculating(false);
+    }
+  };
+
   return (
     <section>
       <h2>Скачанные файлы</h2>
@@ -63,8 +78,8 @@ export default function FilesPage() {
           <input type="checkbox" checked={selectAll} onChange={toggleAll} /> Выбрать вообще все (
           {data?.total ?? 0})
         </label>
-        <button disabled={chosenCount === 0}>
-          Произвести расчёты ({chosenCount})
+        <button disabled={chosenCount === 0 || calculating} onClick={handleCalculate}>
+          {calculating ? "Считаю..." : `Произвести расчёты (${chosenCount})`}
         </button>
       </div>
 
@@ -122,6 +137,8 @@ export default function FilesPage() {
           </button>
         </div>
       )}
+
+      {stats && <StatsPanel stats={stats} />}
     </section>
   );
 }
