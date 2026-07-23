@@ -78,6 +78,24 @@ async def test_files_search(client, session_factory):
     assert resp.json()["total"] == 0
 
 
+async def test_files_search_escapes_like_wildcards(client, session_factory):
+    # % и _ в поиске — литералы, а не wildcard'ы LIKE
+    async with session_factory() as session:
+        session.add(File(name="100%_report.txt", content="x", downloaded_at=datetime.now(UTC)))
+        session.add(File(name="1000_report.txt", content="x", downloaded_at=datetime.now(UTC)))
+        await session.commit()
+
+    resp = await client.get("/api/files", params={"search": "100%"})
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "100%_report.txt"
+
+    resp = await client.get("/api/files", params={"search": "0_r"})
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "1000_report.txt"
+
+
 async def test_job_status_null(client):
     resp = await client.get("/api/job/status")
     assert resp.status_code == 200

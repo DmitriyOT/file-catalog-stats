@@ -40,7 +40,9 @@ async def list_files(
     count_stmt = select(func.count(File.id))
     list_stmt = select(File)
     if search:
-        condition = File.name.ilike(f"%{search}%")
+        # \ % _ — спецсимволы LIKE, экранируем, чтобы поиск был по литералу
+        pattern = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        condition = File.name.ilike(f"%{pattern}%", escape="\\")
         count_stmt = count_stmt.where(condition)
         list_stmt = list_stmt.where(condition)
 
