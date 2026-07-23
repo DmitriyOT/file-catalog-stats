@@ -1,6 +1,5 @@
 from datetime import datetime
 from math import ceil
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -9,10 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.models import File
+from app.timefmt import format_nsk
 
 router = APIRouter(prefix="/api/files", tags=["Файлы"])
-
-NSK = ZoneInfo("Asia/Novosibirsk")
 
 
 class FileItem(BaseModel):
@@ -57,7 +55,7 @@ async def list_files(
                 id=f.id,
                 name=f.name,
                 downloaded_at=f.downloaded_at,
-                downloaded_at_nsk=f.downloaded_at.astimezone(NSK).strftime("%d.%m.%Y %H:%M:%S"),
+                downloaded_at_nsk=format_nsk(f.downloaded_at),
             )
             for f in rows
         ],

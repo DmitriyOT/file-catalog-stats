@@ -1,19 +1,18 @@
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api_client import FileApiClient
 from app.db import get_session, session_factory
 from app.downloader import is_running, start_download_job
 from app.models import DownloadJob
+from app.timefmt import format_nsk
 
 router = APIRouter(prefix="/api/job", tags=["Скачивание"])
-
-NSK = ZoneInfo("Asia/Novosibirsk")
 
 
 class JobStatus(BaseModel):
@@ -32,7 +31,7 @@ def to_status(job: DownloadJob) -> JobStatus:
         id=job.id,
         status=job.status,
         started_at=job.started_at,
-        started_at_nsk=job.started_at.astimezone(NSK).strftime("%d.%m.%Y %H:%M:%S"),
+        started_at_nsk=format_nsk(job.started_at),
         finished_at=job.finished_at,
         names_received=job.names_received,
         files_downloaded=job.files_downloaded,
@@ -49,7 +48,12 @@ async def start_job(session: AsyncSession = Depends(get_session)) -> JobStatus:
 
     job = DownloadJob(status="running")
     session.add(job)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Гонка двух стартов: unique index на status='running' пропустил только одну задачу
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Скачивание уже запущено") from None
     await session.refresh(job)
 
     start_download_job(job.id, session_factory, FileApiClient())
