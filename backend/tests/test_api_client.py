@@ -1,11 +1,18 @@
 import io
 import zipfile
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 import httpx
 import pytest
 
 from app import api_client as api_client_module
-from app.api_client import ExternalApiError, FileApiClient
+from app.api_client import (
+    DEFAULT_RETRY_AFTER,
+    MAX_RETRY_AFTER,
+    ExternalApiError,
+    FileApiClient,
+)
 from app.config import settings
 
 
@@ -19,6 +26,17 @@ def no_delays(monkeypatch):
 
 async def _no_sleep(delay):
     return None
+
+
+def record_sleeps(monkeypatch) -> list[float]:
+    """Заменить sleep на регистратор: вернуть список запрошенных пауз."""
+    sleeps: list[float] = []
+
+    async def record(delay):
+        sleeps.append(delay)
+
+    monkeypatch.setattr(api_client_module.asyncio, "sleep", record)
+    return sleeps
 
 
 def make_client(handler, on_ban=None) -> FileApiClient:
@@ -231,3 +249,144 @@ async def test_429_does_not_notify_on_ban():
     client = make_client(handler, on_ban=ban_events.append)
     assert await client.get_names() == []
     assert ban_events == []
+
+
+# --- Парсинг Retry-After ---
+
+
+def test_parse_retry_after_numeric():
+    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "7"})) == 7.0
+    # 0 — валидное значение, дефолтом не подменяется
+    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "0"})) == 0.0
+    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "1.5"})) == 1.5
+
+
+def test_parse_retry_after_negative_and_garbage_are_default():
+    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "-5"})) == DEFAULT_RETRY_AFTER
+    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "soon"})) == DEFAULT_RETRY_AFTER
+
+
+def test_parse_retry_after_missing_is_default():
+    assert FileApiClient._parse_retry_after(httpx.Response(429)) == DEFAULT_RETRY_AFTER
+
+
+def test_parse_retry_after_capped():
+    """Кривой заголовок не должен усыпить задачу на сутки: потолок MAX_RETRY_AFTER."""
+    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "999999"})) == MAX_RETRY_AFTER
+    future = datetime.now(timezone.utc) + timedelta(days=2)
+    resp = httpx.Response(429, headers={"Retry-After": format_datetime(future, usegmt=True)})
+    assert FileApiClient._parse_retry_after(resp) == MAX_RETRY_AFTER
+
+
+def test_parse_retry_after_http_date_future():
+    future = datetime.now(timezone.utc) + timedelta(seconds=120)
+    resp = httpx.Response(429, headers={"Retry-After": format_datetime(future, usegmt=True)})
+    value = FileApiClient._parse_retry_after(resp)
+    assert 100 < value <= 120  # допуск на время выполнения теста
+
+
+def test_parse_retry_after_http_date_past_is_zero():
+    past = datetime.now(timezone.utc) - timedelta(seconds=120)
+    resp = httpx.Response(429, headers={"Retry-After": format_datetime(past, usegmt=True)})
+    assert FileApiClient._parse_retry_after(resp) == 0.0
+
+
+# --- Ожидание: Retry-After против backoff ---
+
+
+async def test_retry_after_zero_means_no_default_wait(monkeypatch):
+    """Retry-After: 0 -> ожидание 0, а не дефолтные 5 с."""
+    sleeps = record_sleeps(monkeypatch)
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(429, headers={"Retry-After": "0"})
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler)
+    assert await client.get_names() == []
+    assert DEFAULT_RETRY_AFTER not in sleeps
+    assert all(delay < 1.0 for delay in sleeps)
+
+
+async def test_retry_after_takes_priority_over_backoff(monkeypatch):
+    """Есть Retry-After — ждём строго его, а не экспоненту backoff."""
+    sleeps = record_sleeps(monkeypatch)
+    responses = iter(
+        [
+            httpx.Response(500),  # backoff: 1 c
+            httpx.Response(429, headers={"Retry-After": "7"}),  # ждём 7, а не 2**1
+            httpx.Response(200, json={"file_names": []}),
+        ]
+    )
+
+    client = make_client(lambda r: next(responses))
+    assert await client.get_names() == []
+    assert sleeps[0] == 1  # backoff для 500
+    assert 6.5 < sleeps[1] <= 7.0  # Retry-After в приоритете над экспонентой
+
+
+async def test_separate_backoff_counters(monkeypatch):
+    """Серия 429 не накручивает backoff сетевых ошибок/5xx: счётчики раздельные."""
+    sleeps = record_sleeps(monkeypatch)
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": "5"}),
+            httpx.Response(429, headers={"Retry-After": "5"}),
+            httpx.Response(429, headers={"Retry-After": "5"}),
+            httpx.Response(500),  # backoff стартует с 1 c, а не с 2**3=8
+            httpx.Response(200, json={"file_names": []}),
+        ]
+    )
+
+    client = make_client(lambda r: next(responses))
+    assert await client.get_names() == []
+    assert 8 not in sleeps  # общий счётчик дал бы 2**3
+    assert 1 in sleeps  # backoff для 5xx — с минимальной задержки
+
+
+async def test_success_resets_backoff_counters(monkeypatch):
+    """Успешный запрос сбрасывает счётчики backoff."""
+    sleeps = record_sleeps(monkeypatch)
+    responses = iter(
+        [
+            httpx.Response(500),  # backoff 1 c
+            httpx.Response(500),  # backoff 2 c
+            httpx.Response(200, json={"file_names": []}),  # сброс счётчиков
+            httpx.Response(500),  # снова backoff 1 c, а не 4
+            httpx.Response(200, json={"file_names": []}),
+        ]
+    )
+
+    client = make_client(lambda r: next(responses))
+    assert await client.get_names() == []
+    assert await client.get_names() == []
+    assert sleeps == [1, 2, 1]
+    assert client._error_attempts == 0
+    assert client._rate_attempts == 0
+
+
+async def test_on_ban_gets_delay_from_http_date():
+    """on_ban получает фактическое время ожидания и при Retry-After в формате HTTP-date."""
+    calls = 0
+    ban_events: list[float | None] = []
+    unbanned_at = datetime.now(timezone.utc) + timedelta(seconds=90)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                403,
+                headers={"Retry-After": format_datetime(unbanned_at, usegmt=True)},
+            )
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler, on_ban=ban_events.append)
+    assert await client.get_names() == []
+    assert len(ban_events) == 2
+    assert 80 < ban_events[0] <= 90
+    assert ban_events[1] is None

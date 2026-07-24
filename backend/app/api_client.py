@@ -6,6 +6,8 @@ import time
 import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -14,6 +16,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 DEFAULT_RETRY_AFTER = 5.0
+MAX_RETRY_AFTER = 3600.0  # потолок ожидания по Retry-After: кривой заголовок не усыпит задачу на сутки
 MAX_BATCH_SIZE = 3
 
 # Уведомление о бане: секунды до разбана или None, когда бан снят
@@ -34,13 +37,17 @@ class FileApiClient:
     """Клиент API выдачи файлов с учётом ограничений частоты запросов.
 
     - проактивная пауза между запросами (request_min_interval);
-    - 429/403: все запросы блокируются до конца Retry-After (_blocked_until);
+    - 429/403: Retry-After в приоритете — ждём строго его (число секунд или
+      HTTP-date, см. _parse_retry_after); все запросы блокируются до конца
+      Retry-After (_blocked_until);
     - 429/403: Retry-After запоминается как лимит темпа на всю сессию —
       сервер сообщил «не чаще, чем раз в N секунд», и мы ему подчиняемся,
       иначе повторные нарушения приведут к новому 30-минутному бану (403);
     - 403 (бан): перед сном на Retry-After вызывается on_ban(секунды),
       после первого успешного запроса — on_ban(None);
-    - сетевые ошибки и 5xx: повтор с экспоненциальным backoff.
+    - сетевые ошибки и 5xx: повтор с экспоненциальным backoff; счётчик backoff
+      у них свой (_error_attempts), у rate-limit ошибок — свой (_rate_attempts),
+      чтобы серия 429 не накручивала паузы сетевым сбоям; успех сбрасывает оба.
     """
 
     def __init__(
@@ -62,6 +69,8 @@ class FileApiClient:
         self._last_request_at = 0.0
         self._blocked_until = 0.0  # монотонное время, до которого запросы запрещены (Retry-After)
         self._min_interval = settings.request_min_interval  # растёт при 429/403 — см. _slow_down
+        self._rate_attempts = 0  # подряд идущие 429/403
+        self._error_attempts = 0  # подряд идущие сетевые ошибки/5xx — счётчик backoff
 
     async def close(self) -> None:
         if self._owns_client:
@@ -96,10 +105,14 @@ class FileApiClient:
             try:
                 resp = await self._client.request(method, path, headers=headers, **kwargs)
             except httpx.HTTPError as exc:
-                await self._backoff(attempt, f"сетевая ошибка: {exc}")
+                await self._backoff(self._error_attempts, f"сетевая ошибка: {exc}")
+                self._error_attempts += 1
                 continue
 
             if resp.status_code < 400:
+                # Успех: оба счётчика backoff сбрасываются
+                self._rate_attempts = 0
+                self._error_attempts = 0
                 if self._banned:
                     # Первый успешный запрос после бана — бан отбыт
                     self._banned = False
@@ -108,6 +121,7 @@ class FileApiClient:
 
             if resp.status_code in (403, 429):
                 retry_after = self._parse_retry_after(resp)
+                self._rate_attempts += 1
                 logger.warning(
                     "%s %s -> %s, повтор через %.1f c (попытка %d/%d)",
                     method, path, resp.status_code, retry_after, attempt + 1, settings.max_retries,
@@ -119,7 +133,8 @@ class FileApiClient:
                 continue
 
             if resp.status_code >= 500:
-                await self._backoff(attempt, f"HTTP {resp.status_code}")
+                await self._backoff(self._error_attempts, f"HTTP {resp.status_code}")
+                self._error_attempts += 1
                 continue
 
             # 4xx, которые не имеет смысла повторять (404, 422)
@@ -159,13 +174,41 @@ class FileApiClient:
 
     @staticmethod
     def _parse_retry_after(resp: httpx.Response) -> float:
-        try:
-            return max(float(resp.headers.get("Retry-After", "")), 0.0) or DEFAULT_RETRY_AFTER
-        except ValueError:
+        """Секунды ожидания из заголовка Retry-After (RFC 7231).
+
+        - число секунд, включая 0 и дробные ("0", "1.5") — как есть;
+        - HTTP-date ("Wed, 24 Jul 2026 06:00:00 GMT") — дельта от текущего
+          момента; дата в прошлом — 0;
+        - отрицательные числа, мусор и отсутствие заголовка — дефолт.
+
+        Результат ограничен сверху MAX_RETRY_AFTER.
+        """
+        value = resp.headers.get("Retry-After")
+        if value is None:
             return DEFAULT_RETRY_AFTER
+        try:
+            seconds = float(value)
+        except ValueError:
+            try:
+                date = parsedate_to_datetime(value)
+            except (TypeError, ValueError):
+                return DEFAULT_RETRY_AFTER
+            if date.tzinfo is None:  # RFC 7231 предполагает GMT, но подстрахуемся
+                date = date.replace(tzinfo=timezone.utc)
+            seconds = max((date - datetime.now(timezone.utc)).total_seconds(), 0.0)
+        else:
+            if seconds < 0:
+                return DEFAULT_RETRY_AFTER
+        return min(seconds, MAX_RETRY_AFTER)
 
     @staticmethod
     async def _backoff(attempt: int, reason: str) -> None:
+        """Экспоненциальная пауза для сетевых ошибок/5xx.
+
+        Применяется только когда сервер не сообщил Retry-After: при наличии
+        заголовка ждём строго его. attempt — счётчик _error_attempts,
+        отдельный от rate-limit ошибок (429/403 их паузы не накручивают).
+        """
         delay = min(2**attempt, 30)
         logger.warning("Ошибка (%s), повтор через %d c", reason, delay)
         await asyncio.sleep(delay)
