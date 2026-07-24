@@ -70,6 +70,35 @@ button:disabled {
   color: #cf1124;
 }
 
+.error-block {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border-left: 4px solid #cf1124;
+  border-radius: 4px;
+}
+
+.error-block button {
+  padding: 0.35rem 0.9rem;
+}
+
+.warning {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: #fffbea;
+  border-left: 4px solid #f0b429;
+  border-radius: 4px;
+}
+
+button.danger {
+  margin-left: 0.75rem;
+  background: #cf1124;
+}
+
+button.danger:disabled {
+  background: #9aa5b1;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -152,6 +181,20 @@ table.stats td {
   background: #323f4b;
   color: #9fe6b8;
   font-size: 0.9rem;
+}
+
+.download-badge.banned {
+  color: #ffd166;
+}
+
+.download-badge.error-badge {
+  margin-left: auto;
+  background: #5c1a1a;
+  color: #ff9b9b;
+}
+
+.download-badge.banned .pulse {
+  background: #f0b429;
 }
 
 .pulse {

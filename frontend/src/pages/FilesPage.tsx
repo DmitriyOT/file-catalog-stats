@@ -34,6 +34,7 @@ export default function FilesPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [calculating, setCalculating] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,10 +46,13 @@ export default function FilesPage() {
     try {
       const result = await getFiles(page, PER_PAGE, sort, search);
       // поздний ответ устаревшего запроса не должен перезаписать более свежий
-      if (seq === requestSeq.current) setData(result);
+      if (seq === requestSeq.current) {
+        setData(result);
+        setLoadError(null);
+      }
     } catch (e) {
       if (seq === requestSeq.current)
-        setError(e instanceof Error ? e.message : String(e));
+        setLoadError(e instanceof Error ? e.message : String(e));
     } finally {
       // индикатор снимает только последний (актуальный) запрос
       if (seq === requestSeq.current) setLoading(false);
@@ -126,6 +130,12 @@ export default function FilesPage() {
     <section>
       <h2>Скачанные файлы</h2>
       {error && <p className="error">{error}</p>}
+      {loadError && (
+        <div className="error-block">
+          <p className="error">Не удалось загрузить список файлов: {loadError}</p>
+          <button onClick={load}>Повторить</button>
+        </div>
+      )}
 
       <div className="toolbar">
         <input

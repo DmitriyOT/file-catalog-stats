@@ -1,12 +1,14 @@
 export interface JobStatus {
   id: number;
-  status: "running" | "done" | "failed";
+  status: "running" | "done" | "failed" | "cancelled";
   started_at: string;
   started_at_nsk: string;
   finished_at: string | null;
   names_received: number;
   files_downloaded: number;
   error: string | null;
+  /** Локальное время НСК, до которого внешнее API нас забанило; null, если бана нет */
+  banned_until_nsk: string | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -28,6 +30,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function startJob(): Promise<JobStatus> {
   return request<JobStatus>("/api/job/start", { method: "POST" });
+}
+
+/** Отменить выполняющуюся задачу; 409, если running-задачи нет */
+export function cancelJob(): Promise<JobStatus> {
+  return request<JobStatus>("/api/job/cancel", { method: "POST" });
 }
 
 export function getJobStatus(): Promise<JobStatus | null> {
