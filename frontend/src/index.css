@@ -1,11 +1,83 @@
 :root {
   font-family: system-ui, sans-serif;
-  color: #1f2933;
+  color: var(--text);
+  color-scheme: light;
+
+  --bg: #f5f7fa;
+  --surface: #fff;
+  --text: #1f2933;
+  --text-muted: #9aa5b1;
+  --border: #e4e7eb;
+  --shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+
+  --nav-bg: #1f2933;
+  --nav-text: #fff;
+  --nav-link: #cbd2d9;
+
+  --primary: #0967d2;
+  --primary-text: #fff;
+  --disabled: #9aa5b1;
+  --danger: #cf1124;
+
+  --error-text: #cf1124;
+  --warning-bg: #fffbea;
+  --warning-border: #f0b429;
+
+  --input-bg: #fff;
+  --input-border: #cbd2d9;
+
+  --badge-bg: #323f4b;
+  --badge-ok: #9fe6b8;
+  --badge-warn: #ffd166;
+  --badge-error-bg: #5c1a1a;
+  --badge-error-text: #ff9b9b;
+  --pulse-ok: #3ebd64;
+
+  --pagination-bg: #e4e7eb;
+  --pagination-disabled-bg: #f5f7fa;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #141a21;
+  --surface: #1f2933;
+  --text: #e4e7eb;
+  --text-muted: #7b8794;
+  --border: #3e4c59;
+  --shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+
+  --nav-bg: #0f141a;
+  --nav-text: #f5f7fa;
+  --nav-link: #9aa5b1;
+
+  --primary: #2186eb;
+  --primary-text: #fff;
+  --disabled: #52606d;
+  --danger: #e12d39;
+
+  --error-text: #ff9b9b;
+  --warning-bg: #3a3112;
+  --warning-border: #f0b429;
+
+  --input-bg: #1f2933;
+  --input-border: #52606d;
+
+  --badge-bg: #323f4b;
+  --badge-ok: #9fe6b8;
+  --badge-warn: #ffd166;
+  --badge-error-bg: #5c1a1a;
+  --badge-error-text: #ff9b9b;
+  --pulse-ok: #3ebd64;
+
+  --pagination-bg: #323f4b;
+  --pagination-disabled-bg: #1f2933;
 }
 
 body {
   margin: 0;
-  background: #f5f7fa;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .nav {
@@ -13,8 +85,8 @@ body {
   align-items: center;
   gap: 2rem;
   padding: 0.75rem 1.5rem;
-  background: #1f2933;
-  color: #fff;
+  background: var(--nav-bg);
+  color: var(--nav-text);
 }
 
 .nav h1 {
@@ -28,12 +100,12 @@ body {
 }
 
 .nav a {
-  color: #cbd2d9;
+  color: var(--nav-link);
   text-decoration: none;
 }
 
 .nav a.active {
-  color: #fff;
+  color: var(--nav-text);
   font-weight: 600;
 }
 
@@ -48,33 +120,41 @@ button {
   font-size: 1rem;
   border: none;
   border-radius: 4px;
-  background: #0967d2;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-text);
   cursor: pointer;
 }
 
 button:disabled {
-  background: #9aa5b1;
+  background: var(--disabled);
   cursor: default;
+}
+
+.theme-toggle {
+  margin-left: auto;
+  padding: 0.35rem 0.9rem;
+  background: transparent;
+  border: 1px solid var(--nav-link);
+  color: var(--nav-text);
 }
 
 .card {
   margin-top: 1rem;
   padding: 1rem 1.25rem;
-  background: #fff;
+  background: var(--surface);
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  box-shadow: var(--shadow);
 }
 
 .error {
-  color: #cf1124;
+  color: var(--error-text);
 }
 
 .error-block {
   margin: 1rem 0;
   padding: 0.75rem 1rem;
-  background: #fff;
-  border-left: 4px solid #cf1124;
+  background: var(--surface);
+  border-left: 4px solid var(--danger);
   border-radius: 4px;
 }
 
@@ -85,18 +165,18 @@ button:disabled {
 .warning {
   margin: 1rem 0;
   padding: 0.75rem 1rem;
-  background: #fffbea;
-  border-left: 4px solid #f0b429;
+  background: var(--warning-bg);
+  border-left: 4px solid var(--warning-border);
   border-radius: 4px;
 }
 
 button.danger {
   margin-left: 0.75rem;
-  background: #cf1124;
+  background: var(--danger);
 }
 
 button.danger:disabled {
-  background: #9aa5b1;
+  background: var(--disabled);
 }
 
 .toolbar {
@@ -109,15 +189,15 @@ button.danger:disabled {
 table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 th,
 td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #e4e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 th.sortable {
@@ -145,63 +225,64 @@ table.stats td {
 .search {
   padding: 0.45rem 0.75rem;
   font-size: 1rem;
-  border: 1px solid #cbd2d9;
+  border: 1px solid var(--input-border);
   border-radius: 4px;
   min-width: 260px;
+  background: var(--input-bg);
+  color: var(--text);
 }
 
 .pagination button {
   padding: 0.3rem 0.65rem;
-  background: #e4e7eb;
-  color: #1f2933;
+  background: var(--pagination-bg);
+  color: var(--text);
 }
 
 .pagination button.active {
-  background: #0967d2;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-text);
   font-weight: 600;
 }
 
 .pagination button:disabled {
-  background: #f5f7fa;
-  color: #9aa5b1;
+  background: var(--pagination-disabled-bg);
+  color: var(--text-muted);
 }
 
 .pagination .gap {
-  color: #9aa5b1;
+  color: var(--text-muted);
 }
 
 .download-badge {
-  margin-left: auto;
+  margin-left: 0.75rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.75rem;
   border-radius: 999px;
-  background: #323f4b;
-  color: #9fe6b8;
+  background: var(--badge-bg);
+  color: var(--badge-ok);
   font-size: 0.9rem;
 }
 
 .download-badge.banned {
-  color: #ffd166;
+  color: var(--badge-warn);
 }
 
 .download-badge.error-badge {
-  margin-left: auto;
-  background: #5c1a1a;
-  color: #ff9b9b;
+  background: var(--badge-error-bg);
+  color: var(--badge-error-text);
 }
 
 .download-badge.banned .pulse {
-  background: #f0b429;
+  background: var(--warning-border);
 }
 
 .pulse {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #3ebd64;
+  background: var(--pulse-ok);
   animation: pulse 1.2s ease-in-out infinite;
 }
 

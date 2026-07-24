@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useJobStatus } from "./JobStatusProvider";
+import { useTheme } from "../theme";
 
 /** «24.07.2026 14:05:30» → «14:05»; если формат иной — возвращаем как есть */
 function shortTime(nsk: string): string {
@@ -8,6 +9,7 @@ function shortTime(nsk: string): string {
 
 export default function Header() {
   const { job, unreachable } = useJobStatus();
+  const { theme, toggleTheme } = useTheme();
   const running = job?.status === "running";
   const bannedUntil = running && job ? job.banned_until_nsk : null;
 
@@ -30,6 +32,14 @@ export default function Header() {
             : `Идёт скачивание: ${job.files_downloaded} из ${job.names_received}`}
         </span>
       )}
+      <button
+        type="button"
+        className="theme-toggle"
+        onClick={toggleTheme}
+        title="Переключить тему оформления"
+      >
+        {theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+      </button>
     </header>
   );
 }
