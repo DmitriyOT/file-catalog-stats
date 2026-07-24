@@ -46,9 +46,7 @@ def make_ban_callback(
             job = await session.get(DownloadJob, job_id)
             if job is None:
                 return
-            job.banned_until = (
-                datetime.now(UTC) + timedelta(seconds=wait) if wait is not None else None
-            )
+            job.banned_until = datetime.now(UTC) + timedelta(seconds=wait) if wait is not None else None
             await session.commit()
 
     return on_ban
@@ -103,7 +101,9 @@ async def run_download_job(
                     await client.mark_downloaded(list(files))
                     logger.info(
                         "Задача %d: получено %d имён, скачано %d",
-                        job_id, job.names_received, job.files_downloaded,
+                        job_id,
+                        job.names_received,
+                        job.files_downloaded,
                     )
 
         async with session_factory() as session:

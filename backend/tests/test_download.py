@@ -159,7 +159,7 @@ async def wait_for(condition, timeout: float = 5.0) -> None:
         if condition():
             return
         await asyncio.sleep(0.01)
-    raise TimeoutError("условие не наступило за %.1f c" % timeout)
+    raise TimeoutError(f"условие не наступило за {timeout:.1f} c")
 
 
 async def test_ban_callback_sets_and_clears_banned_until(session_factory):
@@ -280,9 +280,7 @@ async def test_cancel_during_ban_sleep(session_factory, monkeypatch):
     """Отмена прерывает сон на бане внутри клиента, а не ждёт конца Retry-After."""
     monkeypatch.setattr(settings, "request_min_interval", 0)
 
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(403, headers={"Retry-After": "60"})
-    )
+    transport = httpx.MockTransport(lambda request: httpx.Response(403, headers={"Retry-After": "60"}))
     real_client = FileApiClient(
         base_url="http://test",
         candidate_id="test-candidate",

@@ -1,6 +1,6 @@
 import io
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 
 import httpx
@@ -262,8 +262,9 @@ def test_parse_retry_after_numeric():
 
 
 def test_parse_retry_after_negative_and_garbage_are_default():
-    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "-5"})) == DEFAULT_RETRY_AFTER
-    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "soon"})) == DEFAULT_RETRY_AFTER
+    parse = FileApiClient._parse_retry_after
+    assert parse(httpx.Response(429, headers={"Retry-After": "-5"})) == DEFAULT_RETRY_AFTER
+    assert parse(httpx.Response(429, headers={"Retry-After": "soon"})) == DEFAULT_RETRY_AFTER
 
 
 def test_parse_retry_after_missing_is_default():
@@ -272,21 +273,22 @@ def test_parse_retry_after_missing_is_default():
 
 def test_parse_retry_after_capped():
     """Кривой заголовок не должен усыпить задачу на сутки: потолок MAX_RETRY_AFTER."""
-    assert FileApiClient._parse_retry_after(httpx.Response(429, headers={"Retry-After": "999999"})) == MAX_RETRY_AFTER
-    future = datetime.now(timezone.utc) + timedelta(days=2)
+    resp = httpx.Response(429, headers={"Retry-After": "999999"})
+    assert FileApiClient._parse_retry_after(resp) == MAX_RETRY_AFTER
+    future = datetime.now(UTC) + timedelta(days=2)
     resp = httpx.Response(429, headers={"Retry-After": format_datetime(future, usegmt=True)})
     assert FileApiClient._parse_retry_after(resp) == MAX_RETRY_AFTER
 
 
 def test_parse_retry_after_http_date_future():
-    future = datetime.now(timezone.utc) + timedelta(seconds=120)
+    future = datetime.now(UTC) + timedelta(seconds=120)
     resp = httpx.Response(429, headers={"Retry-After": format_datetime(future, usegmt=True)})
     value = FileApiClient._parse_retry_after(resp)
     assert 100 < value <= 120  # допуск на время выполнения теста
 
 
 def test_parse_retry_after_http_date_past_is_zero():
-    past = datetime.now(timezone.utc) - timedelta(seconds=120)
+    past = datetime.now(UTC) - timedelta(seconds=120)
     resp = httpx.Response(429, headers={"Retry-After": format_datetime(past, usegmt=True)})
     assert FileApiClient._parse_retry_after(resp) == 0.0
 
@@ -373,7 +375,7 @@ async def test_on_ban_gets_delay_from_http_date():
     """on_ban получает фактическое время ожидания и при Retry-After в формате HTTP-date."""
     calls = 0
     ban_events: list[float | None] = []
-    unbanned_at = datetime.now(timezone.utc) + timedelta(seconds=90)
+    unbanned_at = datetime.now(UTC) + timedelta(seconds=90)
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls

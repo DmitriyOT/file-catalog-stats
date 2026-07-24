@@ -12,8 +12,10 @@ Create Date: 2026-07-24
 В offline-режиме (генерация SQL без подключения) инспекция невозможна,
 поэтому скрипт генерируется под пустую базу.
 """
-from alembic import context, op
+
 import sqlalchemy as sa
+
+from alembic import context, op
 
 # revision identifiers, used by Alembic.
 revision = "0001_initial"

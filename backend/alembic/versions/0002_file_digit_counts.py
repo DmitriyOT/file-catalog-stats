@@ -8,8 +8,10 @@ Create Date: 2026-07-24
 миграция — no-op. В offline-режиме инспекция невозможна, DDL генерируется
 без проверки.
 """
-from alembic import context, op
+
 import sqlalchemy as sa
+
+from alembic import context, op
 
 # revision identifiers, used by Alembic.
 revision = "0002_file_digit_counts"

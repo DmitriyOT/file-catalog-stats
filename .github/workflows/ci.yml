@@ -16,6 +16,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
+      - run: ruff check
+      - run: ruff format --check
+      - run: bandit -r app/ -c pyproject.toml
       - run: pytest
       - run: mypy app/
 

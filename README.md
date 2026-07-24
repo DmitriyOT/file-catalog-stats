@@ -52,6 +52,11 @@ cd backend
 .venv/Scripts/python -m pytest                  # БД — SQLite in-memory
 ```
 
+Проверки кода (то же, что в CI): линт и форматирование — `ruff check` и
+`ruff format --check`, безопасность — `bandit -r app/ -c pyproject.toml`,
+типы — `mypy app/` (все команды — из `backend/`). Хуки на коммит:
+`pre-commit install` в корне репозитория (ruff + базовые проверки файлов).
+
 ## Переменные окружения (backend)
 
 | Переменная | По умолчанию | Описание |

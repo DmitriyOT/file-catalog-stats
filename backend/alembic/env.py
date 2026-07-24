@@ -4,15 +4,16 @@
 1. `alembic -x dburl=...` — для локальных проверок (например, SQLite-файл);
 2. settings.database_url (переменная окружения DATABASE_URL).
 """
+
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
 from app.config import settings
 from app.db import Base
-from app.models import File, DownloadJob  # noqa: F401 — регистрация таблиц в metadata
+from app.models import DownloadJob, File  # noqa: F401 — регистрация таблиц в metadata
 
 config = context.config
 

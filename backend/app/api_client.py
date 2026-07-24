@@ -6,7 +6,7 @@ import time
 import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 import httpx
@@ -124,7 +124,12 @@ class FileApiClient:
                 self._rate_attempts += 1
                 logger.warning(
                     "%s %s -> %s, повтор через %.1f c (попытка %d/%d)",
-                    method, path, resp.status_code, retry_after, attempt + 1, settings.max_retries,
+                    method,
+                    path,
+                    resp.status_code,
+                    retry_after,
+                    attempt + 1,
+                    settings.max_retries,
                 )
                 if resp.status_code == 403:
                     self._banned = True
@@ -164,10 +169,13 @@ class FileApiClient:
             await result
 
     async def _throttle(self) -> None:
-        wait = max(
-            self._blocked_until,
-            self._last_request_at + self._min_interval,
-        ) - time.monotonic()
+        wait = (
+            max(
+                self._blocked_until,
+                self._last_request_at + self._min_interval,
+            )
+            - time.monotonic()
+        )
         if wait > 0:
             await asyncio.sleep(wait)
         self._last_request_at = time.monotonic()
@@ -194,8 +202,8 @@ class FileApiClient:
             except (TypeError, ValueError):
                 return DEFAULT_RETRY_AFTER
             if date.tzinfo is None:  # RFC 7231 предполагает GMT, но подстрахуемся
-                date = date.replace(tzinfo=timezone.utc)
-            seconds = max((date - datetime.now(timezone.utc)).total_seconds(), 0.0)
+                date = date.replace(tzinfo=UTC)
+            seconds = max((date - datetime.now(UTC)).total_seconds(), 0.0)
         else:
             if seconds < 0:
                 return DEFAULT_RETRY_AFTER
