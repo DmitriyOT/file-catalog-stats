@@ -27,8 +27,15 @@ Backend:
 cd backend
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # Windows; на *nix: .venv/bin/pip
+alembic upgrade head                            # миграции схемы БД
 uvicorn app.main:app --reload                   # нужен PostgreSQL, см. DATABASE_URL
 ```
+
+Схема БД управляется Alembic-миграциями (`backend/alembic/`): в Docker они
+применяются автоматически при старте контейнера (`alembic upgrade head` перед
+uvicorn). `create_all` при старте приложения оставлен как страховка для
+локального запуска — при существующей схеме это no-op, источник правды о
+схеме — миграции. URL базы миграции берут из `DATABASE_URL`.
 
 Frontend (dev-сервер с прокси `/api` на localhost:8000):
 
@@ -87,6 +94,8 @@ cd backend
 
 ```
 backend/
+  alembic/          # миграции схемы БД (env.py, versions/)
+  alembic.ini       # конфиг Alembic (URL — из DATABASE_URL)
   app/
     api_client.py   # клиент внешнего API (rate limit, retry, ZIP)
     downloader.py   # фоновая задача скачивания каталога
