@@ -17,6 +17,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
       - run: pytest
+      - run: mypy app/
 
   frontend:
     runs-on: ubuntu-latest

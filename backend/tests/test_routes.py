@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
+
+import app.stats as stats_module
 from app.models import File
 
 
@@ -128,3 +131,33 @@ async def test_stats_all(client, session_factory):
 async def test_stats_requires_selection(client):
     resp = await client.post("/api/stats", json={})
     assert resp.status_code == 422
+
+
+async def test_files_per_page_limit(client):
+    """per_page ограничен сверху: слишком большие страницы отклоняются."""
+    resp = await client.get("/api/files", params={"per_page": 101})
+    assert resp.status_code == 422
+
+
+async def test_stats_digit_counts_cached(client, session_factory, monkeypatch):
+    """Первый расчёт заполняет кэш digit_counts, повторный берёт его без пересчёта."""
+    ids = await seed_files(session_factory, 2)  # содержимое: '0'*500, '1'*500
+
+    resp = await client.post("/api/stats", json={"file_ids": ids})
+    assert resp.status_code == 200
+    body = resp.json()
+
+    async with session_factory() as session:
+        rows = (await session.scalars(select(File).order_by(File.name))).all()
+    assert all(f.digit_counts is not None for f in rows)
+    assert rows[0].digit_counts["0"] == 500
+
+    # count_digits «ломаем»: повторный запрос обязан обойтись кэшем
+    def boom(content: str) -> dict[str, int]:
+        raise AssertionError("пересчёт не должен вызываться — есть кэш")
+
+    monkeypatch.setattr(stats_module, "count_digits", boom)
+
+    resp = await client.post("/api/stats", json={"file_ids": ids})
+    assert resp.status_code == 200
+    assert resp.json() == body

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.models import File
-from app.stats import calculate_stats
+from app.stats import calculate_stats_cached
 
 router = APIRouter(prefix="/api/stats", tags=["Расчёты"])
 
@@ -41,7 +41,7 @@ async def calculate(
     else:
         raise HTTPException(status_code=422, detail="Укажите file_ids или all=true")
 
-    total, per_file = calculate_stats(files)
+    total, per_file = await calculate_stats_cached(files, session)
     return StatsResponse(
         total=total,
         files=[FileStats(id=f.id, name=f.name, counts=counts) for f, counts in per_file],
