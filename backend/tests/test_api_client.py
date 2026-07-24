@@ -21,12 +21,13 @@ async def _no_sleep(delay):
     return None
 
 
-def make_client(handler) -> FileApiClient:
+def make_client(handler, on_ban=None) -> FileApiClient:
     transport = httpx.MockTransport(handler)
     return FileApiClient(
         base_url="http://test",
         candidate_id="test-candidate",
         client=httpx.AsyncClient(transport=transport, base_url="http://test"),
+        on_ban=on_ban,
     )
 
 
@@ -161,8 +162,8 @@ async def test_429_never_shrinks_interval():
     assert client._min_interval == 10.0
 
 
-async def test_403_does_not_raise_min_interval():
-    """Retry-After при 403 — длительность бана, а не лимит темпа."""
+async def test_403_raises_min_interval():
+    """После бана (403) темп снижаем: прежний интервал уже привёл к бану."""
     calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -174,5 +175,59 @@ async def test_403_does_not_raise_min_interval():
 
     client = make_client(handler)
     assert await client.get_names() == []
-    assert client._min_interval == 0  # интервал не вырос
-    assert client._blocked_until > 0  # но запросы заблокированы до разбана
+    assert client._min_interval == 1800.0  # интервал вырос, чтобы не словить повторный бан
+    assert client._blocked_until > 0  # и запросы заблокированы до разбана
+
+
+async def test_403_notifies_on_ban_and_reset_after_success():
+    """403 с Retry-After -> on_ban(секунды); первый успех после бана -> on_ban(None)."""
+    calls = 0
+    ban_events: list[float | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(403, json={"detail": "banned"}, headers={"Retry-After": "30"})
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler, on_ban=ban_events.append)  # sync-callback тоже поддерживается
+    assert await client.get_names() == []
+    assert ban_events == [30.0, None]
+    assert client._min_interval == 30.0
+
+
+async def test_on_ban_async_callback():
+    calls = 0
+    ban_events: list[float | None] = []
+
+    async def on_ban(wait: float | None) -> None:
+        ban_events.append(wait)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(403, headers={"Retry-After": "10"})
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler, on_ban=on_ban)
+    assert await client.get_names() == []
+    assert ban_events == [10.0, None]
+
+
+async def test_429_does_not_notify_on_ban():
+    """429 — не бан: on_ban не вызывается."""
+    calls = 0
+    ban_events: list[float | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(429, headers={"Retry-After": "5"})
+        return httpx.Response(200, json={"file_names": []})
+
+    client = make_client(handler, on_ban=ban_events.append)
+    assert await client.get_names() == []
+    assert ban_events == []

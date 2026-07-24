@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from datetime import UTC, datetime
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -19,6 +20,38 @@ _running: dict[int, asyncio.Task] = {}
 def is_running(job_id: int) -> bool:
     task = _running.get(job_id)
     return task is not None and not task.done()
+
+
+def cancel_download_job(job_id: int) -> bool:
+    """Запросить отмену активной задачи. False — задача не запущена."""
+    task = _running.get(job_id)
+    if task is None or task.done():
+        return False
+    task.cancel()
+    return True
+
+
+def make_ban_callback(
+    job_id: int,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> Callable[[float | None], Awaitable[None]]:
+    """Callback для FileApiClient: отражает бан внешнего API в поле job.banned_until.
+
+    Сессия открывается на каждое уведомление: бан может длиться полчаса,
+    держать соединение всё это время нельзя.
+    """
+
+    async def on_ban(wait: float | None) -> None:
+        async with session_factory() as session:
+            job = await session.get(DownloadJob, job_id)
+            if job is None:
+                return
+            job.banned_until = (
+                datetime.now(UTC) + timedelta(seconds=wait) if wait is not None else None
+            )
+            await session.commit()
+
+    return on_ban
 
 
 async def run_download_job(
@@ -71,6 +104,16 @@ async def run_download_job(
             job.finished_at = datetime.now(UTC)
             await session.commit()
             logger.info("Задача %d завершена: скачано %d файлов", job_id, job.files_downloaded)
+    except asyncio.CancelledError:
+        # Отмена через POST /api/job/cancel (в т.ч. во время сна на бане в клиенте)
+        logger.info("Задача %d отменена", job_id)
+        async with session_factory() as session:
+            job = await session.get(DownloadJob, job_id)
+            if job is not None:
+                job.status = "cancelled"
+                job.finished_at = datetime.now(UTC)
+                await session.commit()
+        raise
     except Exception as exc:
         logger.exception("Задача %d завершилась с ошибкой", job_id)
         async with session_factory() as session:

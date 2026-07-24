@@ -1,8 +1,10 @@
 import asyncio
+import inspect
 import io
 import logging
 import time
 import zipfile
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import httpx
@@ -13,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_RETRY_AFTER = 5.0
 MAX_BATCH_SIZE = 3
+
+# Уведомление о бане: секунды до разбана или None, когда бан снят
+OnBanCallback = Callable[[float | None], Awaitable[None] | None]
 
 
 @dataclass
@@ -30,9 +35,11 @@ class FileApiClient:
 
     - проактивная пауза между запросами (request_min_interval);
     - 429/403: все запросы блокируются до конца Retry-After (_blocked_until);
-    - 429: Retry-After запоминается как лимит темпа на всю сессию —
+    - 429/403: Retry-After запоминается как лимит темпа на всю сессию —
       сервер сообщил «не чаще, чем раз в N секунд», и мы ему подчиняемся,
-      иначе повторные нарушения приведут к 30-минутному бану (403);
+      иначе повторные нарушения приведут к новому 30-минутному бану (403);
+    - 403 (бан): перед сном на Retry-After вызывается on_ban(секунды),
+      после первого успешного запроса — on_ban(None);
     - сетевые ошибки и 5xx: повтор с экспоненциальным backoff.
     """
 
@@ -41,6 +48,7 @@ class FileApiClient:
         base_url: str | None = None,
         candidate_id: str | None = None,
         client: httpx.AsyncClient | None = None,
+        on_ban: OnBanCallback | None = None,
     ) -> None:
         self._base_url = (base_url or settings.api_base_url).rstrip("/")
         self._candidate_id = candidate_id or settings.candidate_id
@@ -49,9 +57,11 @@ class FileApiClient:
             timeout=settings.request_timeout,
         )
         self._owns_client = client is None
+        self._on_ban = on_ban
+        self._banned = False  # сейчас отбываем бан (403), ждём разбана
         self._last_request_at = 0.0
         self._blocked_until = 0.0  # монотонное время, до которого запросы запрещены (Retry-After)
-        self._min_interval = settings.request_min_interval  # растёт при 429 — см. _slow_down
+        self._min_interval = settings.request_min_interval  # растёт при 429/403 — см. _slow_down
 
     async def close(self) -> None:
         if self._owns_client:
@@ -90,6 +100,10 @@ class FileApiClient:
                 continue
 
             if resp.status_code < 400:
+                if self._banned:
+                    # Первый успешный запрос после бана — бан отбыт
+                    self._banned = False
+                    await self._notify_ban(None)
                 return resp
 
             if resp.status_code in (403, 429):
@@ -98,7 +112,10 @@ class FileApiClient:
                     "%s %s -> %s, повтор через %.1f c (попытка %d/%d)",
                     method, path, resp.status_code, retry_after, attempt + 1, settings.max_retries,
                 )
-                self._slow_down(resp.status_code, retry_after)
+                if resp.status_code == 403:
+                    self._banned = True
+                    await self._notify_ban(retry_after)
+                self._slow_down(retry_after)
                 continue
 
             if resp.status_code >= 500:
@@ -110,18 +127,26 @@ class FileApiClient:
 
         raise ExternalApiError(f"{method} {path}: исчерпаны повторы ({settings.max_retries})")
 
-    def _slow_down(self, status: int, retry_after: float) -> None:
-        """Остановить все запросы до конца Retry-After; при 429 — запомнить лимит темпа.
+    def _slow_down(self, retry_after: float) -> None:
+        """Остановить все запросы до конца Retry-After и запомнить лимит темпа.
 
         Retry-After при 429 — это фактически сообщение о лимите сервера
         («не чаще одного запроса в N секунд»), поэтому он становится новым
-        минимальным интервалом на всю сессию. При 403 (бан) Retry-After —
-        длительность блокировки, а не лимит, интервал не трогаем.
+        минимальным интервалом на всю сессию. После 403 (бана) интервал тоже
+        поднимаем: прежний темп уже привёл к бану, повторять его нельзя.
         """
         self._blocked_until = time.monotonic() + retry_after
-        if status == 429 and retry_after > self._min_interval:
+        if retry_after > self._min_interval:
             self._min_interval = retry_after
             logger.info("Сервер сообщил лимит: не чаще 1 запроса в %.1f c", retry_after)
+
+    async def _notify_ban(self, wait: float | None) -> None:
+        """Сообщить подписчику о бане (секунды до разбана) или о его снятии (None)."""
+        if self._on_ban is None:
+            return
+        result = self._on_ban(wait)
+        if inspect.isawaitable(result):
+            await result
 
     async def _throttle(self) -> None:
         wait = max(

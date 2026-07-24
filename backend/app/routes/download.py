@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api_client import FileApiClient
 from app.db import get_session, session_factory
-from app.downloader import is_running, start_download_job
+from app.downloader import cancel_download_job, is_running, make_ban_callback, start_download_job
 from app.models import DownloadJob
 from app.timefmt import format_nsk
 
@@ -24,6 +24,8 @@ class JobStatus(BaseModel):
     names_received: int
     files_downloaded: int
     error: str | None
+    banned_until: datetime | None
+    banned_until_nsk: str | None
 
 
 def to_status(job: DownloadJob) -> JobStatus:
@@ -36,6 +38,8 @@ def to_status(job: DownloadJob) -> JobStatus:
         names_received=job.names_received,
         files_downloaded=job.files_downloaded,
         error=job.error,
+        banned_until=job.banned_until,
+        banned_until_nsk=format_nsk(job.banned_until) if job.banned_until is not None else None,
     )
 
 
@@ -56,7 +60,8 @@ async def start_job(session: AsyncSession = Depends(get_session)) -> JobStatus:
         raise HTTPException(status_code=409, detail="Скачивание уже запущено") from None
     await session.refresh(job)
 
-    start_download_job(job.id, session_factory, FileApiClient())
+    client = FileApiClient(on_ban=make_ban_callback(job.id, session_factory))
+    start_download_job(job.id, session_factory, client)
     return to_status(job)
 
 
@@ -65,3 +70,13 @@ async def job_status(session: AsyncSession = Depends(get_session)) -> JobStatus 
     """Статус последней задачи скачивания (null, если задач ещё не было)."""
     job = await session.scalar(select(DownloadJob).order_by(DownloadJob.id.desc()).limit(1))
     return to_status(job) if job is not None else None
+
+
+@router.post("/cancel", response_model=JobStatus)
+async def cancel_job(session: AsyncSession = Depends(get_session)) -> JobStatus:
+    """Отменить активное скачивание. Статус задачи станет cancelled, когда фоновая
+    задача обработает отмену (обычно мгновенно, даже во время ожидания разбана)."""
+    job = await session.scalar(select(DownloadJob).where(DownloadJob.status == "running"))
+    if job is None or not cancel_download_job(job.id):
+        raise HTTPException(status_code=409, detail="Нет активной задачи для отмены")
+    return to_status(job)
